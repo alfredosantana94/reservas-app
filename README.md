@@ -47,3 +47,33 @@ Al usar el filtro `^API_`, le indicamos a Nginx que **únicamente** reemplace la
 - **Construcción Multi-Etapa (Frontend):** Separa la fase de compilación del artefacto de producción, descartando Node.js, npm, dependencias de compilación y el código fuente en la imagen final.
 - **Imagen base `nginxinc/nginx-unprivileged:1.27-alpine` (Frontend):** Proporciona un servidor web enfocado en seguridad (sin root) y ligero basado en Alpine Linux, logrando un peso final pequeño.
 - **Uso de `.dockerignore`:** Evita la transferencia inútil de archivos pesados de desarrollo (como `node_modules` locales, carpetas de compilación `.git` o `.env`) hacia el contexto del demonio de Docker durante el `build`.
+
+### Demostración y Explicación del Build Cache
+
+- **Modificación de código fuente:** Mantener la copia del código fuente al final permite que las capas pesadas (`package*.json` y `npm ci`) se reutilicen desde la caché (`CACHED`), haciendo las reconstrucciones de desarrollo casi instantáneas.
+- **Modificación del manifiesto de dependencias:** Al cambiar `package.json`, Docker detecta la alteración en el hash del archivo e invalida la caché en la instrucción `COPY ./package*.json ./`, obligando a reejecutar el comando `RUN npm ci`.
+
+**¿Por qué el orden de las instrucciones lo hace posible?**
+Docker evalúa las capas de forma secuencial. Al copiar e instalar primero las dependencias antes que el código fuente de la aplicación, se garantiza que los cambios frecuentes en el código no invaliden prematuramente la caché de las dependencias pesadas.
+
+## Publicación de Imágenes en Docker Hub
+
+Para permitir que el clúster de Kubernetes/Swarm pueda descargar las imágenes en etapas posteriores, se publicaron los artefactos en los repositorios públicos de Docker Hub:
+
+### Nombres completos de las imágenes publicadas:
+- **Backend:** `MI_USUARIO/reservas-api:v1`
+- **Frontend:** `MI_USUARIO/reservas-frontend:v1`
+
+### Comandos utilizados para la publicación:
+
+```bash
+# 1. Autenticación en Docker Hub
+docker login
+
+# 2. Etiquetado de las imágenes locales
+docker tag reservas-api:v1 MI_USUARIO/reservas-api:v1
+docker tag reservas-frontend:v1 MI_USUARIO/reservas-frontend:v1
+
+# 3. Publicación en el registro público
+docker push MI_USUARIO/reservas-api:v1
+docker push MI_USUARIO/reservas-frontend:v1

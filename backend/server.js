@@ -18,7 +18,7 @@ function traducirError(err) {
   switch (err.code) {
     case 'ER_DUP_ENTRY':
       return err.message.includes('sin_solapamiento')
-        ? { status: 409, error: 'esa sala ya está reservada en esa fecha y franja' }
+        ? { status: 409, error: 'esa sala ya está reservada en esa fecha y franja HORARIA' }
         : { status: 409, error: 'ya existe una sala con ese nombre' };
     case 'ER_NO_REFERENCED_ROW_2':
       return { status: 400, error: 'la sala indicada no existe' };
