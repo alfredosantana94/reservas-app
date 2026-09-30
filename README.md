@@ -30,3 +30,20 @@ La imagen oficial de Nginx utiliza internamente la herramienta `envsubst` al arr
 Si no se define `NGINX_ENVSUBST_FILTER=^API_`, el proceso de sustitución intentará reemplazar **todas** las variables que encuentre en el archivo de configuración, incluyendo las variables nativas de Nginx como `$uri`, `$host`, `$proxy_add_x_forwarded_for`, etc. Al no estar definidas en el sistema operativo, `envsubst` las reemplazará por cadenas vacías, corrompiendo silenciosamente la configuración de Nginx e impidiendo el correcto funcionamiento del servidor.
 
 Al usar el filtro `^API_`, le indicamos a Nginx que **únicamente** reemplace las variables de entorno que comiencen con el prefijo `API_`, preservando intactas las variables nativas de Nginx.
+
+## Tabla Comparativa de Imágenes y Medición de Optimizaciones
+
+| Imagen / Servicio | Imagen Base Utilizada | Tamaño Versión Ingenua | Tamaño Versión Definitiva | Reducción Obtenida (%) |
+| :--- | :--- | :--- | :--- | :--- |
+| **Backend (`reservas-api`)** | `node:20-slim` | 1.1 GB *(imagen sin optimizar)* | 206 MB | **~81.2%** |
+| **Frontend (`reservas-frontend`)** | `nginxinc/nginx-unprivileged:1.27-alpine` | ~1.1 GB - 1.2 GB *(con Node/npm)* | 48.4 MB | **~95.6%** |
+
+---
+
+### Justificación de Decisiones de Arquitectura y Optimización
+
+- **Uso de la imagen base `node:20-slim` (Backend):** Reduce drásticamente el tamaño inicial del backend al eliminar paquetes del sistema operativo no esenciales para el entorno de ejecución de Node.js.
+- **Instalación con `npm ci --omit=dev` (Backend):** Realiza instalaciones desde el `package-lock.json` omitiendo dependencias de desarrollo (`devDependencies`), reduciendo peso en el directorio `node_modules`.
+- **Construcción Multi-Etapa (Frontend):** Separa la fase de compilación del artefacto de producción, descartando Node.js, npm, dependencias de compilación y el código fuente en la imagen final.
+- **Imagen base `nginxinc/nginx-unprivileged:1.27-alpine` (Frontend):** Proporciona un servidor web enfocado en seguridad (sin root) y ligero basado en Alpine Linux, logrando un peso final pequeño.
+- **Uso de `.dockerignore`:** Evita la transferencia inútil de archivos pesados de desarrollo (como `node_modules` locales, carpetas de compilación `.git` o `.env`) hacia el contexto del demonio de Docker durante el `build`.
