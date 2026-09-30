@@ -2,7 +2,7 @@
 FROM node:20-slim AS deps
 WORKDIR /app
 #Cumplimiento del requisito b
-COPY ./backend/package*.json ./
+COPY ./package*.json ./
 #Cumplimiento del requisito a
 RUN npm ci --omit=dev
 
