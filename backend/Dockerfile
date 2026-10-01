@@ -1,5 +1,5 @@
 #Etapa 1 para construir la imagen solo con las dependencias y con ALPINE que es mas liviano
-FROM node:20-slim AS deps
+FROM node:20-alpine AS deps
 WORKDIR /app
 #Cumplimiento del requisito b
 COPY ./package*.json ./
@@ -7,7 +7,7 @@ COPY ./package*.json ./
 RUN npm ci --omit=dev
 
 #Etapa 2 para construir la imagen con una base mínima y la variable ENV  NODE_ENV=production;
-FROM node:20-slim AS final
+FROM node:20-alpine AS final
 WORKDIR /app
 #Cumplimiento del requisito c
 ENV NODE_ENV=production;
