@@ -61,8 +61,9 @@ Docker evalúa las capas de forma secuencial. Al copiar e instalar primero las d
 Para permitir que el clúster de Kubernetes/Swarm pueda descargar las imágenes en etapas posteriores, se publicaron los artefactos en los repositorios públicos de Docker Hub:
 
 ### Nombres completos de las imágenes publicadas:
-- **Backend:** `MI_USUARIO/reservas-api:v1`
-- **Frontend:** `MI_USUARIO/reservas-frontend:v1`
+- **Backend:** `MI_USUARIO/reservas-api`
+- **Frontend:** `alfredosantana94/reservas-api`
+- **Tag:** `:v1`:v1
 
 ### Comandos utilizados para la publicación:
 
