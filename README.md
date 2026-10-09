@@ -78,3 +78,79 @@ docker tag reservas-frontend:v1 MI_USUARIO/reservas-frontend:v1
 # 3. Publicación en el registro público
 docker push MI_USUARIO/reservas-api:v1
 docker push MI_USUARIO/reservas-frontend:v1
+```
+
+## Despliegue de la Base de Datos (`reservas-db`)
+
+```
+### Comando de ejecución
+docker run -d \
+  --name reservas-db \
+  --network reservas-net \
+  -v reservas-db-data:/var/lib/mysql \
+  -e MYSQL_DATABASE=reservasdb \
+  -e MYSQL_USER=reservas_user \
+  -e MYSQL_PASSWORD=reservas_pass \
+  -e MYSQL_ROOT_PASSWORD=reservas_root_pass \
+  mysql:8.4
+
+### Variables de Entorno Utilizadas:
+- `MYSQL_DATABASE=reservasdb`: Define el nombre de la base de datos de la aplicación.
+- `MYSQL_USER=reservas_user`: Define el usuario no raíz para las conexiones de la API.
+- `MYSQL_PASSWORD=reservas_pass`: Establece la contraseña del usuario no raíz.
+- `MYSQL_ROOT_PASSWORD=root_pass`: Establece la clave del usuario administrador (`root`).
+```
+### Errores durante la ejecución del Reverse Proxy sin red
+
+Al ejecutar el contenedor del frontend sin conectarlo a la red privada (`--network reservas-net`):
+
+```bash
+docker run -d --name reservas-frontend -p 3000:8080 -e API_HOST=reservas-api -e API_PORT=3000 reservas-frontend:v1
+```
+
+### Error al iniciar el Reverse Proxy sin Red
+- **Al chquear el estado del contenedor con el comando `docker ps -a`:** 
+  ```
+  Exited (1)
+  ```
+- **Al revisar el Log de error con el comando `docker logs reservas-frontend`:**
+  ```text
+  timestamp [emerg] 1#1: host not found in upstream "reservas-api" in /etc/nginx/conf.d/default.conf:24
+  ```
+
+### Explicación:
+Nginx resuelve la dirección IP del host configurado en la directiva `proxy_pass http://${API_HOST}:${API_PORT}/;` una sola vez durante su proceso de inicialización. 
+Al omitir el argumento `--network reservas-net`, el contenedor queda ubicado en la red predeterminada `bridge` y carece de acceso al servidor DNS interno de Docker. Como no puede resolver el nombre `reservas-api`, Nginx aborta la inicialización con un error fatal (`[emerg]`), provocando el colapso inmediato del contenedor con código de salida 1.
+
+---
+
+## Orden de Arranque
+
+El despliegue manual mediante comandos de consola requiere respetar estrictamente la siguiente secuencia de dependencias:
+
+$$\text{Red } (\texttt{reservas-net}) \longrightarrow \text{Volumen } (\texttt{reservas-data}) \longrightarrow \text{Base de Datos } (\texttt{reservas-db}) \longrightarrow \text{Backend } (\texttt{reservas-api}) \longrightarrow \text{Frontend } (\texttt{reservas-frontend})$$
+
+### Inversión del orden: Ejecución del Frontend en primer lugar
+
+Si se intenta levantar únicamente el frontend al inicio sin haber creado previamente la red, el volumen, la base de datos ni la API:
+
+1. **Si se especifica `--network reservas-net`:** Docker rechaza el comando inmediatamente con un error de consola (`network reservas-net not found`), ya que la red virtual no existe en el motor.
+2. **Si se omite la red (o se crea la red pero sin los otros contenedores):** El script de entrada de Nginx (`20-envsubst-on-templates.sh`) genera la configuración, pero el proceso principal falla al resolver la IP de `reservas-api`. Nginx arroja el error fatal `[emerg] host not found in upstream "reservas-api"` y el contenedor pasa inmediatamente a estado `Exited (1)`.
+3. **Inoperatividad del sistema:** La aplicación web queda inaccesible y sin Backend/Base de Datos para procesar las peticiones HTTP.
+
+### Matriz de fallos al invertir otros pasos intermedios:
+
+- **Levantar la API antes que la Base de Datos:**
+  El backend intenta abrir una conexión TCP hacia `reservas-db:3306`. Al no encontrar la base de datos lista en la red, la aplicación falla con `ECONNREFUSED` y el contenedor se detiene (`Exited (1)`).
+- **Levantar la Base de Datos sin asociar el Volumen:**
+  La base de datos arranca normalmente, pero almacena sus archivos en el almacenamiento efímero del contenedor. Al destruir o recrear `reservas-db`, toda la información guardada se pierde.
+- **Destruir o reiniciar la Base de Datos con la API en ejecución:**
+  La API pierde la conexión TCP. Aunque el contenedor de MySQL vuelva a estar activo, el pool de conexiones de Node.js no se recupera solo y requiere un reinicio explícito del contenedor (`docker restart reservas-api`).
+
+---
+
+## Limitación del Despliegue Manual
+
+En la arquitectura actual, la orquestación y el cumplimiento del orden de dependencias residen **únicamente en el conocimiento operativo del administrador** que ejecuta los comandos por consola, sin existencia de ningún archivo ejecutable que automatice la secuencia.
+
+Esta limitación se resolverá en la siguiente etapa mediante **Docker Compose**, utilizando la directiva `depends_on` combinada con comprobaciones de estado de salud (`condition: service_healthy`).

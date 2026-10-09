@@ -16,6 +16,8 @@ ARG APP_VERSION=v1
 ENV APP_VERSION=${APP_VERSION}
 #Copiamos unicamente la carpeta dist
 COPY --from=build /app/dist /usr/share/nginx/html
+#Falta copiar la plantilla de nginx
+COPY nginx/templates/default.conf.template /etc/nginx/templates/default.conf.template
 #Variables de entorno
 ENV API_HOST=reservas-api \
     API_PORT=3000 \
