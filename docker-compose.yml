@@ -1,0 +1,84 @@
+services:
+#Comando usado en el TP anterior
+#docker run -d
+#--name reservas-db
+#--network reservas-net
+#-e MYSQL_DATABASE=reservasdb
+#-e MYSQL_USER=reservas_user
+#-e MYSQL_PASSWORD=reservas_pass
+#-e MYSQL_ROOT_PASSWORD=reservas_root_pass
+#-v reservas-db-data:/var/lib/mysql 
+#mysql:8.4
+  reservas-db:
+    image: mysql:8.4
+    container_name: reservas-db
+    environment:
+      - MYSQL_ROOT_PASSWORD=root_pass
+      - MYSQL_USER=reservas_user
+      - MYSQL_PASSWORD=reservas_pass
+      - MYSQL_DATABASE=reservasdb
+    volumes:
+      - reservas-db-data:/var/lib/mysql
+    networks:
+      - reservas-net
+#Comando usado en el TP anterior
+#docker run -d 
+#--name reservas-api 
+#--network reservas-net 
+#-p 3001:3000 -e DB_HOST=reservas-db 
+#-e DB_PORT=3306 -e DB_NAME=reservasdb 
+#-e DB_USER=reservas_user -e DB_PASSWORD=reservas_pass 
+#-e APP_VERSION=v1 -e SEED_DEMO=true 
+#reservas-api:v1
+  reservas-api:
+    image: alfredosantana94/reservas-api:v1
+    container_name: reservas-api
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      - DB_HOST=reservas-db
+      - DB_PORT=3306
+      - DB_NAME=reservasdb
+      - DB_USER=reservas_user
+      - DB_PASSWORD=reservas_pass
+      - APP_VERSION=v1
+      - SEED_DEMO=true
+    ports:
+      - "3001:3000"
+    networks:
+      - reservas-net
+#Comando usado en el TP anterior
+#docker run -d 
+#--name reservas-frontend 
+#--network reservas-net 
+#-p 3000:8080 -e API_HOST=reservas-api 
+#-e API_PORT=3000 
+#reservas-frontend:v1    
+#ESTO OLVIDE LA VEZ PASADA -v ./frontend/nginx/templates/default.conf.template:/etc/nginx/templates/default.conf.template
+  reservas-frontend:
+    image: alfredosantana94/reservas-frontend:v1
+    container_name: reservas-frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    environment:
+      - API_HOST=reservas-api
+      - API_PORT=3000
+      - NGINX_ENVSUBST_FILTER=^API_
+    ports:
+      - "3000:8080"
+    volumes:
+      - ./frontend/nginx/templates/default.conf.template:/etc/nginx/templates/default.conf.template
+    networks:
+      - reservas-net
+
+volumes:
+  reservas-db-data:
+    external: true
+    name: reservas-db-data
+
+networks:
+  reservas-net:
+    external: true
+    name: reservas-net
