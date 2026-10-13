@@ -17,6 +17,14 @@ services:
       - MYSQL_USER=reservas_user
       - MYSQL_PASSWORD=reservas_pass
       - MYSQL_DATABASE=reservasdb
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - mysqladmin ping -h 127.0.0.1 -u root -p"$$MYSQL_ROOT_PASSWORD" --silent
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
     volumes:
       - reservas-db-data:/var/lib/mysql
     networks:
@@ -36,6 +44,12 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    healthcheck:
+      test: 
+        - CMD 
+        - node 
+        - -e 
+        - "fetch('http://127.0.0.1:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))" 
     environment:
       - DB_HOST=reservas-db
       - DB_PORT=3306
@@ -44,6 +58,9 @@ services:
       - DB_PASSWORD=reservas_pass
       - APP_VERSION=v1
       - SEED_DEMO=true
+    depends_on:
+      reservas-db:
+        condition: service_healthy
     ports:
       - "3001:3000"
     networks:
@@ -66,6 +83,15 @@ services:
       - API_HOST=reservas-api
       - API_PORT=3000
       - NGINX_ENVSUBST_FILTER=^API_
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      reservas-api:
+        condition: service_healthy
     ports:
       - "3000:8080"
     volumes:

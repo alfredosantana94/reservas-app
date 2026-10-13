@@ -154,3 +154,100 @@ Si se intenta levantar únicamente el frontend al inicio sin haber creado previa
 En la arquitectura actual, la orquestación y el cumplimiento del orden de dependencias residen **únicamente en el conocimiento operativo del administrador** que ejecuta los comandos por consola, sin existencia de ningún archivo ejecutable que automatice la secuencia.
 
 Esta limitación se resolverá en la siguiente etapa mediante **Docker Compose**, utilizando la directiva `depends_on` combinada con comprobaciones de estado de salud (`condition: service_healthy`).
+
+## Configuración del Healthcheck para la Base de Datos (`reservas-db`)
+
+El servicio de base de datos incluye un control de salud (*healthcheck*) adaptado a las características de inicialización de MySQL:
+
+```yaml
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - mysqladmin ping -h 127.0.0.1 -u root -p"$$MYSQL_ROOT_PASSWORD" --silent
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+
+Justificación Técnica y Decisiones de Diseño
+
+¿Por qué se escribe `$$` y no `$`?
+Con un solo `$`, la interpolación de la variable la realiza Compose al leer el archivo, y la contraseña queda escrita en la línea de comando del healthcheck, visible mediante `docker inspect`. Con `$$`, Compose escribe un `$` literal y la variable la expande el intérprete dentro del contenedor, evitando exponer credenciales en texto plano.
+  
+¿Por qué hace falta `start_period 40s`?
+La primera inicialización del directorio de datos de MySQL es lenta debido a la creación de tablas del sistema y estructuras internas. Sin ese período de gracia, el contenedor puede quedar marcado como `unhealthy` cuando en realidad se encontraba arrancando de manera correcta.
+```
+
+### Configuración del Healthcheck para la API (`reservas-api`)
+
+Para verificar que el backend se encuentra respondiendo peticiones HTTP de manera correcta, se implementó un control de salud (*healthcheck*) aprovechando los recursos nativos del entorno de ejecución:
+
+```yaml
+healthcheck:
+  test:
+    - CMD
+    - node
+    - -e
+    - "fetch('[http://127.0.0.1:3000/health').then(r](http://127.0.0.1:3000/health').then(r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+  interval: 5s
+  timeout: 5s
+  retries: 20
+  start_period: 10s
+
+Justificación Técnica y Decisiones de Diseño
+
+¿Por que no corresponde instalar`curl` (u otras herramientas externas) en la imagen?
+Instalar utilidades del sistema como `curl` o `wget` exclusivamente para realizar el sondeo del *healthcheck* rompe con las buenas prácticas de contenerización. Esto incrementa innecesariamente el tamaño de la imagen Docker, añade capas adicionales al árbol de dependencias del sistema operativo y amplía la superficie de ataque ante posibles vulnerabilidades de seguridad. Al estar ejecutándose una aplicación sobre Node.js (versión 18 en adelante), el motor ya incorpora de forma nativa la función global `fetch`, permitiendo resolver la validación HTTP de manera autónoma, limpia y sin incorporar paquetes externos adicionales.
+```
+
+### Configuración del Healthcheck para el Frontend (`reservas-frontend`)
+
+El contenedor del frontend (construido sobre una imagen basada en Nginx / Alpine) incorpora un control de salud (*healthcheck*) utilizando `wget` para consultar el endpoint de disponibilidad `/healthz`:
+
+```yaml
+healthcheck:
+  test: ["CMD", "wget", "-qO-", "[http://127.0.0.1:8080/healthz](http://127.0.0.1:8080/healthz)"]
+  interval: 5s
+  timeout: 5s
+  retries: 3
+  start_period: 10s
+
+Justificación Técnica y Decisiones de Diseño
+
+¿Por qué se utiliza wget en lugar de instalar nuevas herramientas?
+Las imágenes basadas en Alpine Linux incluyen por defecto BusyBox, el cual provee de forma nativa utilidades esenciales del sistema, entre ellas el comando wget. Utilizar wget (-qO- para modo silencioso e impresión del contenido por salida estándar) permite realizar el sondeo HTTP contra el servidor Nginx interno sin necesidad de alterar la imagen base, instalar paquetes adicionales (curl), ni inflar el tamaño final del contenedor, manteniendo la arquitectura ligera y segura.
+```
+
+### 5. Configuración de dependencias condicionales (`depends_on` con `condition: service_healthy`)
+
+Para establecer un orden de arranque robusto y sincronizado entre los servicios, se configuró la opción `depends_on` utilizando la condición de salud de los contenedores previos:
+
+```yaml
+  reservas-api:
+    depends_on:
+      reservas-db:
+        condition: service_healthy
+
+  reservas-frontend:
+    depends_on:
+      reservas-api:
+        condition: service_healthy
+
+Justificación Técnica y Decisiones de Diseño
+
+reservas-api respecto de reservas-db:
+
+El problema es que la API necesita establecer una conexión activa con la base de datos, pero la primera inicialización del motor de MySQL requiere un tiempo considerable para preparar su directorio de datos.
+
+¿Por qué no basta la forma corta? La sintaxis simplificada depends_on: [reservas-db] únicamente espera a que el contenedor de la base de datos comience a ejecutarse (su proceso PID 1 inicie), pero no garantiza que esté lista para aceptar consultas SQL.
+
+El rol de service_healthy y la resiliencia en Kubernetes
+Con condition: service_healthy, la API espera de manera estricta a que el healthcheck de MySQL responda de forma positiva. Adicionalmente, la API implementa una lógica interna de reintentos de conexión durante aproximadamente 60 segundos. Esta estrategia de reintentos es fundamental ya que es la única que subsistirá en entornos de orquestación avanzados como Kubernetes, donde el concepto nativo de depends_on no existe y la resiliencia recae enteramente en la aplicación y en las sondas de arranque (startup probes).
+
+reservas-frontend respecto de reservas-api:
+
+El problema es que si el frontend inicia antes que el backend, Nginx intenta resolver el nombre del host del upstream al momento de levantar su servicio. Si dicho host aún no existe en la red interna de Docker, Nginx genera un error fatal de resolución (host not found in upstream) y termina abortando su ejecución.
+
+Diferencia operativa: A Nginx le alcanza técnicamente con que el contenedor del backend comience a existir para resolver el nombre de red (por lo que la forma corta también evitaría el error de resolución). Sin embargo, utilizar condition: service_healthy aporta una ventaja adicional: asegura que el frontend arranque con la API ya completamente inicializada y lista para procesar peticiones, evitando por completo las respuestas con errores HTTP 502 Bad Gateway en las primeras consultas del cliente durante los segundos iniciales de despliegue.
+
+```
