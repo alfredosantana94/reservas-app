@@ -251,3 +251,79 @@ El problema es que si el frontend inicia antes que el backend, Nginx intenta res
 Diferencia operativa: A Nginx le alcanza técnicamente con que el contenedor del backend comience a existir para resolver el nombre de red (por lo que la forma corta también evitaría el error de resolución). Sin embargo, utilizar condition: service_healthy aporta una ventaja adicional: asegura que el frontend arranque con la API ya completamente inicializada y lista para procesar peticiones, evitando por completo las respuestas con errores HTTP 502 Bad Gateway en las primeras consultas del cliente durante los segundos iniciales de despliegue.
 
 ```
+
+### Comprobación del error del Frontend y comparación histórica
+
+Tras desplegar el pod `reservas-frontend`, la revisión de los registros mediante `kubectl logs reservas-frontend` arrojó por tercera vez en el curso el mensaje de error:
+`host not found in upstream`.
+
+**Análisis comparativo con la tercera semana (Docker / Docker Compose):**
+* **Identidad del síntoma:** El error en el comportamiento de Nginx es técnicamente idéntico (`host not found in upstream`), ya que el servidor web no puede resolver el dominio de destino del backend.
+* **Diferencia en la causa raíz:** 
+  * En la *tercera semana* (Docker Compose), el fallo ocurría porque los contenedores no compartían la misma red lógica definida o el puente de red no estaba correctamente enlazado.
+  * En el *entorno actual* (Kubernetes con Pods sueltos), la red del clúster existe y es funcional, pero el fallo radica en la **ausencia de un objeto `Service`**, el cual es el único componente autorizado en Kubernetes para registrar nombres DNS estables y realizar el descubrimiento de servicios interno.
+
+  ### Acceso mediante `port-forward` y naturaleza de la herramienta
+
+Mediante el uso de `kubectl port-forward pod/reservas-api 3001:3000`, se estableció un túnel directo desde la máquina local hacia el contenedor de la API dentro del clúster. Las peticiones a `localhost:3001/health` y `localhost:3001/reservas` respondieron correctamente, permitiendo validar la funcionalidad del servicio de forma aislada.
+
+**Conclusión:** El comando `kubectl port-forward` interactúa directamente con el servidor de la API de Kubernetes para tunelizar tráfico hacia un Pod específico. Constituye una **herramienta de diagnóstico y depuración temporal** para desarrolladores, pero **no un mecanismo de publicación** en producción, ya que no ofrece balanceo de carga entre réplicas, no tolera la muerte o recreación del Pod de manera transparente y requiere acceso directo al clúster con privilegios de `kubectl`.
+
+### Cheatsheet de comandos de `kubectl` utilizados
+
+1. `kubectl apply -f [archivo.yaml]`  
+   * **Descripción:** Lee un archivo de manifiesto YAML y crea o actualiza los recursos descritos en él dentro del clúster de Kubernetes.
+
+2. `kubectl get pods`  
+   * **Descripción:** Lista todos los Pods activos en el espacio de nombres actual, permitiendo revisar de forma rápida su nombre, estado, número de reinicios y antigüedad.
+
+3. `kubectl get pods -o wide`  
+   * **Descripción:** Extiende la información del listado de Pods mostrando detalles adicionales de red, como la dirección IP interna asignada a cada Pod y el nodo del clúster donde corren.
+
+4. `kubectl get pods -w`  
+   * **Descripción:** Mantiene la consulta de Pods abierta en modo *watch* (seguimiento en tiempo real), actualizando automáticamente la pantalla ante cualquier cambio de estado o ciclo de vida.
+
+5. `kubectl logs [nombre-pod]`  
+   * **Descripción:** Extrae y muestra en la terminal la salida estándar (`stdout` y `stderr`) generada por los contenedores internos de un Pod específico para realizar depuración.
+
+6. `kubectl exec -it [nombre-pod] -- [comando]`  
+   * **Descripción:** Abre una sesión interactiva o ejecuta un comando puntual dentro del contenedor en ejecución de un Pod determinado (por ejemplo, para probar conectividad o inspeccionar archivos).
+
+7. `kubectl delete pod [nombre-pod]`  
+   * **Descripción:** Elimina de manera inmediata un Pod específico del clúster, forzando su ciclo de destrucción sin la intervención de un controlador.
+
+8. `kubectl port-forward pod/[nombre-pod] [local]:[remoto]`  
+   * **Descripción:** Establece un túnel temporal de red entre la máquina local y un puerto específico del Pod, permitiendo el acceso directo para tareas de diagnóstico sin exponer servicios públicamente.
+
+9. `kubectl get namespaces`  
+   * **Descripción:** Permite listar todos los espacios de nombres (*namespaces*) disponibles en el clúster para verificar el entorno de trabajo actual.
+
+10. `kubectl describe pod [nombre-pod]`  
+    * **Descripción:** Muestra información detallada y diagnósticos avanzados sobre el estado, eventos recientes, configuración y errores de un Pod específico.
+
+### Comparativa: Docker Compose - Manifiestos de Pods
+
+Esta sección analiza las similitudes y diferencias arquitectónicas entre el enfoque de orquestación local mediante `docker-compose.yml` y el despliegue nativo mediante tres manifiestos de Pods independientes en Kubernetes.
+
+| Dimensión | `docker-compose.yml` (Semana anterior) | Tres Manifiestos de Pods (Entrega actual) |
+| :--- | :--- | :--- |
+| **Definición de recursos** | Un archivo único y centralizado que define todos los contenedores, volúmenes y redes. | Tres manifiestos independientes y desacoplados (`pod-reservas-db.yaml`, `pod-reservas-api.yaml`, `pod-reservas-frontend.yaml`). |
+| **Redes y Resolución DNS** | Crea automáticamente una red interna tipo *bridge* donde los contenedores se resuelven por el nombre de su servicio de forma estática. | Los Pods comparten la red del clúster y tienen IPs propias, pero **no existe resolución DNS automática** entre ellos al carecer de objetos `Service`. |
+| **Ciclo de vida y Resiliencia** | El motor maneja el reinicio básico y mantiene los contenedores en ejecución a nivel local (políticas `restart`). | Los Pods sueltos son **mortales y efímeros**; si un pod se elimina o cae, no hay un controlador que lo resucite. |
+
+---
+
+#### ¿Qué se conservó?
+* **Las imágenes de contenedores:** Se utilizaron exactamente las mismas imágenes Docker desarrolladas para la base de datos (`reservas-db`), el backend (`reservas-api`) y el frontend (`reservas-frontend`).
+* **Las variables de entorno y configuración:** Los parámetros de conexión esenciales (como las credenciales de base de datos o los endpoints de comunicación) se mantuvieron mapeados en los contenedores mediante variables de entorno similares.
+* **El diseño modular de la aplicación:** La arquitectura de tres capas (perspectiva de datos, lógica de negocio y capa de presentación) permaneció intacta en su división lógica.
+
+#### ¿Qué desapareció?
+* **La red integrada y el descubrimiento automático de nombres:** Desapareció la abstracción de red de Docker Compose que resolvía automáticamente los nombres de host de manera transparente para los contenedores.
+* **La orquestación centralizada en un único archivo:** Se perdió la facilidad de gestionar toda la infraestructura con un solo comando central (`docker compose up`), debiendo aplicar y administrar manifiestos de forma individual.
+* **El control automático del ciclo de vida:** Desapareció el comportamiento de reintento automático y persistencia local que proveía el demonio de Docker Compose por defecto frente a fallas de contenedores.
+
+#### ¿Qué todavía falta?
+* **Los objetos `Service`:** Componentes fundamentales en Kubernetes para proveer abstracción de red, IPs estables y balanceo de carga interno mediante nombres DNS fijos.
+* **Los controladores de carga de trabajo (`Deployments` / `ReplicaSets`):** Mecanismos de abstracción superiores necesarios para garantizar la resiliencia, escalabilidad horizontal, autorreparación y persistencia de los Pods ante caídas.
+* **Los objetos de configuración y almacenamiento persistente avanzados (`ConfigMaps`, `Secrets` y `PersistentVolumeClaims`):** Capas de abstracción nativas para desacoplar por completo la configuración y los datos de la vida útil de los Pods.
