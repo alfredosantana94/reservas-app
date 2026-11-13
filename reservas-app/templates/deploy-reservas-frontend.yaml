@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reservas-frontend
+  namespace: reservas-app
+spec:
+  replicas: {{ .Values.frontend.replicaCount }}
+  selector:
+    matchLabels:
+      run: reservas-frontend
+  template:
+    metadata:
+      labels:
+        run: reservas-frontend
+    spec:
+      containers:
+        - name: reservas-frontend
+          image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: reservas-frontend-config

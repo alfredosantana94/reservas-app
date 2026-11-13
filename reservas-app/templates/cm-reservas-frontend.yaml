@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: reservas-frontend-config
+  namespace: reservas-app
+data:
+  API_HOST: "reservas-api"
+  API_PORT: "3000"
+  NGINX_ENVSUBST_FILTER: "^API_"

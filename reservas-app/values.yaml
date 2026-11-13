@@ -1,0 +1,32 @@
+# Configuración específica para el proyecto reservas-app
+
+frontend:
+  image:
+    repository: alfredosantana94/reservas-frontend
+    tag: v2
+  replicaCount: 1
+
+
+api:
+  image:
+    repository: alfredosantana94/reservas-api
+    tag: v1
+  replicaCount: 2
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+db:
+  image:
+    repository: mysql
+    tag: "8.4"
+  replicaCount: 1
+
+hpa:
+  minReplicas: 2
+  maxReplicas: 6
+  averageUtilization: 50

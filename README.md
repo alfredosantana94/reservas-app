@@ -329,7 +329,7 @@ Esta sección analiza las similitudes y diferencias arquitectónicas entre el en
 * **Los objetos de configuración y almacenamiento persistente avanzados (`ConfigMaps`, `Secrets` y `PersistentVolumeClaims`):** Capas de abstracción nativas para desacoplar por completo la configuración y los datos de la vida útil de los Pods.
 
 
-## Trabajo Práctico N° 6 — Despliegue en Kubernetes (Variante B)
+## Despliegue en Kubernetes
 
 ### Endpoints verificados (`kubectl get endpoints -n reservas-app`)
 - `reservas-api`: 2 endpoints en puerto `3000`
@@ -342,7 +342,7 @@ Esta sección analiza las similitudes y diferencias arquitectónicas entre el en
 * **Garantía de unicidad en concurrencia:** Con 3 réplicas de la API atendiendo 30 solicitudes simultáneas sobre el mismo turno, solo se registra 1 reserva (`201 Created`) y 29 son rechazadas (`409 Conflict`). La invariante la garantiza el motor MySQL mediante la restricción `UNIQUE (sala_id, fecha, franja)`, y no una validación previa en el código de la aplicación.
 * **Limitación conocida (sin persistencia):** `reservas-db` corre actualmente como un Deployment sin volumen persistente. Al eliminar su Pod, Kubernetes lo recrea automáticamente pero se pierden todas las reservas almacenadas. Esta limitación se resolverá en el TP N° 7 incorporando un `PersistentVolumeClaim`.
 
-## Trabajo Práctico N° 7 — Configuración, Secretos, Persistencia e Ingress (Variante B)
+## Configuración, Secretos, Persistencia e Ingress
 
 ### Inventario de recursos desplegados (`namespace: reservas-app`)
 
@@ -368,3 +368,24 @@ Esta sección analiza las similitudes y diferencias arquitectónicas entre el en
 * **Persistencia y uso de `subPath` en MySQL:** Al montar un volumen que ya contiene archivos en su raíz (`viejo.txt`), MySQL aborta la inicialización con el error `--initialize specified but the data directory has files in it. Aborting.`. El uso de `subPath: mysql` aísla los archivos del motor en un subdirectorio limpio dentro del mismo volumen, permitiendo que las reservas sobrevivan al eliminar y recrear el Pod de `reservas-db`.
 * **Comportamiento del Ingress y SPA (falso positivo):** El `Ingress` define una única regla `/` hacia `reservas-frontend:8080` sin ruta `/api`, delegando el enrutamiento interno al proxy inverso de Nginx. Consultar `curl -i http://reservas.local` devuelve `200 OK` con el documento `index.html` (falso positivo provocado por la directiva `try_files` de la SPA), mientras que `curl -s http://reservas.local` atraviesa el proxy de Nginx y devuelve el JSON real de la base de datos.
 
+
+## Empaquetado con Helm
+
+### Ciclo de vida de la release (`upgrade`, `history` y `rollback`)
+
+1. **Instalación inicial:**
+   ```bash
+   helm install reservas-release ./reservas-app -n reservas-app --create-namespace
+   ```
+
+2. **Actualización desacoplada de la API (`v1` → `v2`):**
+   ```bash
+   helm upgrade reservas-release ./reservas-app --set api.image.tag=v2 -n reservas-app
+   ```
+   *Nota: Modificar `api.image.tag` actualiza únicamente los pods de `reservas-api` sin alterar la imagen ni reiniciar los pods de `reservas-frontend`, confirmando que ambos componentes tienen ciclos de vida independientes.*
+
+3. **Consulta de historial y reversión (`rollback`):**
+   ```bash
+   helm history reservas-release -n reservas-app
+   helm rollback reservas-release <REVISION_ANTERIOR> -n reservas-app
+   ```

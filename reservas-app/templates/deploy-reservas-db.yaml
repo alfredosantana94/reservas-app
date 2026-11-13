@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reservas-db
+  namespace: reservas-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: reservas-db
+  template:
+    metadata:
+      labels:
+        run: reservas-db
+    spec:
+      containers:
+        - name: reservas-db
+          image: mysql:8.4
+          ports:
+            - containerPort: 3306
+          envFrom:
+            - secretRef:
+                name: reservas-db-secret
+          env:
+            - name: MYSQL_DATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: reservas-api-config
+                  key: DB_NAME
