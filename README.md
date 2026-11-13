@@ -341,3 +341,30 @@ Esta sección analiza las similitudes y diferencias arquitectónicas entre el en
 * **Servicio de depuración (`reservas-api-nodeport`):** Expuesto en el puerto `30501` exclusivamente para pruebas y depuración directa de la API. Este objeto no formará parte del chart de Helm en la semana 8.
 * **Garantía de unicidad en concurrencia:** Con 3 réplicas de la API atendiendo 30 solicitudes simultáneas sobre el mismo turno, solo se registra 1 reserva (`201 Created`) y 29 son rechazadas (`409 Conflict`). La invariante la garantiza el motor MySQL mediante la restricción `UNIQUE (sala_id, fecha, franja)`, y no una validación previa en el código de la aplicación.
 * **Limitación conocida (sin persistencia):** `reservas-db` corre actualmente como un Deployment sin volumen persistente. Al eliminar su Pod, Kubernetes lo recrea automáticamente pero se pierden todas las reservas almacenadas. Esta limitación se resolverá en el TP N° 7 incorporando un `PersistentVolumeClaim`.
+
+## Trabajo Práctico N° 7 — Configuración, Secretos, Persistencia e Ingress (Variante B)
+
+### Inventario de recursos desplegados (`namespace: reservas-app`)
+
+| # | Objeto | Tipo (`Kind`) | Función en el proyecto |
+|---|---|---|---|
+| 1 | `reservas-app` | `Namespace` | Aísla lógicamente todos los recursos de la aplicación dentro del clúster. |
+| 2 | `reservas-api-config` | `ConfigMap` | Almacena la configuración no sensible de la API (`DB_HOST`, `DB_PORT`, `DB_NAME`, `PORT`, `SEED_DEMO`). |
+| 3 | `reservas-frontend-config` | `ConfigMap` | Almacena los parámetros de conexión hacia el backend (`API_HOST`, `API_PORT`) usados por Nginx. |
+| 4 | `reservas-db-secret` | `Secret` | Guarda las credenciales de MySQL (`MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_ROOT_PASSWORD`). |
+| 5 | `reservas-db-pvc` | `PersistentVolumeClaim` | Solicita 1 GiB de almacenamiento persistente (`ReadWriteOnce`) para conservar los datos de MySQL. |
+| 6 | `reservas-db` | `Deployment` | Gestiona el contenedor MySQL 8.4 montando el volumen persistente mediante `subPath: mysql`. |
+| 7 | `reservas-api` | `Deployment` | Gestiona las réplicas de la API Node/Express consumiendo variables desde `ConfigMap` y `Secret`. |
+| 8 | `reservas-frontend` | `Deployment` | Gestiona las réplicas del servidor Nginx que sirve la SPA en React y actúa como proxy inverso. |
+| 9 | `reservas-db` | `Service` (`ClusterIP`) | Expone internamente la base de datos en el puerto `3306` mediante DNS estable dentro del namespace. |
+| 10 | `reservas-api` | `Service` (`ClusterIP`) | Balancea el tráfico interno hacia los pods de la API en el puerto `3000`. |
+| 11 | `reservas-app-ingress` | `Ingress` | Enruta el tráfico HTTP externo del host `reservas.local` (`/`) hacia `reservas-frontend:8080`. |
+
+*(Nota: El servicio `reservas-frontend` (`NodePort` `30301`) sigue activo como acceso alternativo de la etapa anterior, y `reservas-api-nodeport` (`30501`) se mantiene exclusivamente para depuración puntual).*
+
+### Notas técnicas y verificaciones
+
+* **Seguridad en `Secret`:** Kubernetes almacena los valores de un `Secret` codificados en Base64 (`base64 -d` devuelve el texto plano), lo cual no constituye cifrado. Para proteger credenciales reales en producción es necesario habilitar el **cifrado en reposo en `etcd`** (*EncryptionConfiguration*) o delegar la gestión a un **gestor de secretos externo** (como External Secrets Operator o HashiCorp Vault).
+* **Persistencia y uso de `subPath` en MySQL:** Al montar un volumen que ya contiene archivos en su raíz (`viejo.txt`), MySQL aborta la inicialización con el error `--initialize specified but the data directory has files in it. Aborting.`. El uso de `subPath: mysql` aísla los archivos del motor en un subdirectorio limpio dentro del mismo volumen, permitiendo que las reservas sobrevivan al eliminar y recrear el Pod de `reservas-db`.
+* **Comportamiento del Ingress y SPA (falso positivo):** El `Ingress` define una única regla `/` hacia `reservas-frontend:8080` sin ruta `/api`, delegando el enrutamiento interno al proxy inverso de Nginx. Consultar `curl -i http://reservas.local` devuelve `200 OK` con el documento `index.html` (falso positivo provocado por la directiva `try_files` de la SPA), mientras que `curl -s http://reservas.local` atraviesa el proxy de Nginx y devuelve el JSON real de la base de datos.
+

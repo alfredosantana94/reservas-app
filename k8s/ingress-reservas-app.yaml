@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: reservas-app-ingress
+  namespace: reservas-app
+spec:
+  rules:
+    - host: reservas.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: reservas-frontend
+                port:
+                  number: 8080

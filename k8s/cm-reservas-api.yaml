@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: reservas-api-config
+  namespace: reservas-app
+data:
+  DB_HOST: "reservas-db"
+  DB_PORT: "3306"
+  DB_NAME: "reservasdb"
+  PORT: "3000"
+  SEED_DEMO: "true"
