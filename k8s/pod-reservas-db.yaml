@@ -7,21 +7,21 @@ metadata:
   namespace: reservas-app
 spec:
   containers:
-  - image: mysql:8.4
-    name: reservas-db
-    ports:
-    - containerPort: 3306
-      protocol: TCP
-    env:
-    - name: MYSQL_DATABASE
-      value: reservasdb
-    - name: MYSQL_USER
-      value: reservas_user
-    - name: MYSQL_PASSWORD
-      value: reservas_pass
-    - name: MYSQL_ROOT_PASSWORD
-      value: root_pass
-    resources: {}
+    - image: mysql:8.4
+      name: reservas-db
+      ports:
+        - containerPort: 3306
+          protocol: TCP
+      env:
+        - name: MYSQL_DATABASE
+          value: reservasdb
+        - name: MYSQL_USER
+          value: reservas_user
+        - name: MYSQL_PASSWORD
+          value: reservas_pass
+        - name: MYSQL_ROOT_PASSWORD
+          value: root_pass
+      resources: {}
   dnsPolicy: ClusterFirst
   restartPolicy: Always
 status: {}

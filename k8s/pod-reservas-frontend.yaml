@@ -7,17 +7,16 @@ metadata:
   namespace: reservas-app
 spec:
   containers:
-  - image: alfredosantana94/reservas-frontend:v1
-    name: reservas-frontend
-    ports:
-    - containerPort: 8080
-      protocol: TCP
-    env:
-    - name: API_HOST
-      value: reservas-api
-    - name: API_PORT
-      value: "3000"
-    resources: {}
+    - image: alfredosantana94/reservas-frontend:v1
+      name: reservas-frontend
+      ports:
+        - containerPort: 8080
+          protocol: TCP
+      env:
+        - name: API_HOST
+          value: reservas-api
+        - name: API_PORT
+          value: "3000"
+      resources: {}
   dnsPolicy: ClusterFirst
   restartPolicy: Always
-status: {}

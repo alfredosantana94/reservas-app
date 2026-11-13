@@ -24,4 +24,4 @@ ENV API_HOST=reservas-api \
     NGINX_ENVSUBST_FILTER=^API_
 #Documentar e iniciar
 EXPOSE 8000
-CMD ["nginx", "-g", "daemon off;"]
+#CMD ["nginx", "-g", "daemon off;"]

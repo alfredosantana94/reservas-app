@@ -327,3 +327,17 @@ Esta sección analiza las similitudes y diferencias arquitectónicas entre el en
 * **Los objetos `Service`:** Componentes fundamentales en Kubernetes para proveer abstracción de red, IPs estables y balanceo de carga interno mediante nombres DNS fijos.
 * **Los controladores de carga de trabajo (`Deployments` / `ReplicaSets`):** Mecanismos de abstracción superiores necesarios para garantizar la resiliencia, escalabilidad horizontal, autorreparación y persistencia de los Pods ante caídas.
 * **Los objetos de configuración y almacenamiento persistente avanzados (`ConfigMaps`, `Secrets` y `PersistentVolumeClaims`):** Capas de abstracción nativas para desacoplar por completo la configuración y los datos de la vida útil de los Pods.
+
+
+## Trabajo Práctico N° 6 — Despliegue en Kubernetes (Variante B)
+
+### Endpoints verificados (`kubectl get endpoints -n reservas-app`)
+- `reservas-api`: 2 endpoints en puerto `3000`
+- `reservas-db`: 1 endpoint en puerto `3306`
+- `reservas-frontend`: 2 endpoints en puerto `8080`
+
+### Notas de arquitectura y decisiones
+* **Orden de aplicación:** Los `Services` deben aplicarse antes que los `Deployments`. Si `reservas-frontend` arranca antes de que exista el DNS del servicio `reservas-api`, Nginx falla al iniciar con el error `host not found in upstream "reservas-api"`.
+* **Servicio de depuración (`reservas-api-nodeport`):** Expuesto en el puerto `30501` exclusivamente para pruebas y depuración directa de la API. Este objeto no formará parte del chart de Helm en la semana 8.
+* **Garantía de unicidad en concurrencia:** Con 3 réplicas de la API atendiendo 30 solicitudes simultáneas sobre el mismo turno, solo se registra 1 reserva (`201 Created`) y 29 son rechazadas (`409 Conflict`). La invariante la garantiza el motor MySQL mediante la restricción `UNIQUE (sala_id, fecha, franja)`, y no una validación previa en el código de la aplicación.
+* **Limitación conocida (sin persistencia):** `reservas-db` corre actualmente como un Deployment sin volumen persistente. Al eliminar su Pod, Kubernetes lo recrea automáticamente pero se pierden todas las reservas almacenadas. Esta limitación se resolverá en el TP N° 7 incorporando un `PersistentVolumeClaim`.

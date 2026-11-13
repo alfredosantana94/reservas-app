@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reservas-frontend
+  namespace: reservas-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      run: reservas-frontend
+  template:
+    metadata:
+      labels:
+        run: reservas-frontend
+    spec:
+      containers:
+        - name: reservas-frontend
+          image: alfredosantana94/reservas-frontend:v2
+          ports:
+            - containerPort: 8080
+          env:
+            - name: API_HOST
+              value: reservas-api
+            - name: API_PORT
+              value: "3000"

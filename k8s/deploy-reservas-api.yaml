@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reservas-api
+  namespace: reservas-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      run: reservas-api
+  template:
+    metadata:
+      labels:
+        run: reservas-api
+    spec:
+      containers:
+        - name: reservas-api
+          image: alfredosantana94/reservas-api:v1
+          ports:
+            - containerPort: 3000
+          env:
+            - name: DB_HOST
+              value: reservas-db
+            - name: DB_PORT
+              value: "3306"
+            - name: DB_NAME
+              value: reservasdb
+            - name: DB_USER
+              value: reservas_user
+            - name: DB_PASSWORD
+              value: reservas_pass
