@@ -80,12 +80,16 @@ A partir de las pruebas realizadas sobre la release `reservas-release`, se actua
 
 ## 4. Prueba de parámetro real en `values.yaml` con `helm template`
 
-Se renderizó la plantilla `templates/deploy-reservas-api.yaml` dos veces con valores distintos para comprobar que los parámetros del `values.yaml` modifican efectivamente el manifiesto generado"".
+Se renderizó la plantilla `templates/deploy-reservas-api.yaml` dos veces con valores distintos para comprobar que los parámetros del `values.yaml` modifican efectivamente el manifiesto generado.
 
 * **Comandos ejecutados:**
   ```bash
   helm template reservas-app ./reservas-app --show-only templates/deploy-reservas-api.yaml | grep -E "name:|replicas:|image:"
   helm template reservas-app ./reservas-app --set api.replicaCount=5 --set api.image.tag=v2 --show-only templates/deploy-reservas-api.yaml | grep -E "name:|replicas:|image:"
+
+* **Evidencia:**
+  ![Renderizado con helm template con valores distintos](informe/templates.png)
+  *Se observa que el manifiesto renderizado cambia de `replicas: 2` e `image: "alfredosantana94/reservas-api:v1"` a `replicas: 5` e `image: "alfredosantana94/reservas-api:v2"` al sobrescribir los parámetros con `--set`.*
 
 ## 5. Prueba de concurrencia con 3 réplicas
 
