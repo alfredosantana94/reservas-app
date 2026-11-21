@@ -1,3 +1,49 @@
+## Cómo levantar el proyecto
+
+> **Nota sobre credenciales:** Los valores de usuario, contraseña y secretos configurados en `docker-compose.yaml` y en el `Secret` de Kubernetes/Helm son **credenciales de laboratorio** con fines académicos. En un entorno productivo deben gestionarse mediante un gestor externo de secretos y nunca almacenarse en texto plano o valores fijos en el repositorio.
+
+### 1. Con Docker Compose (en una sola máquina)
+
+Desde la raíz del proyecto (donde se encuentra `docker-compose.yaml`):
+
+```bash
+# Levantar todos los servicios en segundo plano y esperar comprobaciones de estado
+docker compose up -d
+
+# Verificar el estado y salud de los contenedores
+docker compose ps
+
+# Ver logs si hace falta diagnosticar
+docker compose logs -f
+
+# Detener y eliminar contenedores y red (conservando el volumen de datos)
+docker compose down
+```
+
+### 2. Con Helm sobre el clúster de Kubernetes
+
+```bash
+# Verificar contexto activo
+kubectl config current-context
+
+# Instalar el chart en el namespace reservas-app
+helm install reservas-release ./reservas-app -n reservas-app --create-namespace
+
+# Verificar release, pods, servicios, ingress y HPA
+helm list -n reservas-app
+kubectl get all,ingress,hpa -n reservas-app
+
+# Ejemplo de actualización de imagen de la API y reversión
+helm upgrade reservas-release ./reservas-app --set api.image.tag=v2 -n reservas-app
+helm history reservas-release -n reservas-app
+helm rollback reservas-release <REVISION_ANTERIOR> -n reservas-app
+
+# Desinstalar la release cuando finalicen las pruebas
+helm uninstall reservas-release -n reservas-app
+
+(Si accedes por Ingress con host reservas.local, recuerda resolver reservas.local hacia la IP del Ingress controller en tu entorno local/hosts si no está resuelto por DNS).
+```
+
 ## Arquitectura
 
     navegador ──► reservas-frontend ──────► reservas-api ──────► reservas-db
@@ -389,3 +435,4 @@ Esta sección analiza las similitudes y diferencias arquitectónicas entre el en
    helm history reservas-release -n reservas-app
    helm rollback reservas-release <REVISION_ANTERIOR> -n reservas-app
    ```
+---
